@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useRef } from "react";
 import { UserButton } from "@clerk/nextjs";
 import type { Owner, Period, Task, Status, Week, Role } from "@/lib/types";
-import { STATUSES, STATUS_CLASS, WEEK_ORDER } from "@/lib/types";
+import { STATUSES, WEEKS, STATUS_CLASS, WEEK_ORDER } from "@/lib/types";
 import { counts, pct } from "@/lib/compute";
 import { api } from "@/lib/api";
 import CalendarView from "@/components/CalendarView";
@@ -271,6 +271,79 @@ export default function TrackerApp({
     a.click();
   }
 
+  const csvRef = useRef<HTMLInputElement>(null);
+
+  function parseCsvLine(line: string): string[] {
+    const vals: string[] = [];
+    let cur = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+        else if (ch === '"') inQuotes = false;
+        else cur += ch;
+      } else {
+        if (ch === '"') inQuotes = true;
+        else if (ch === ",") { vals.push(cur.trim()); cur = ""; }
+        else cur += ch;
+      }
+    }
+    vals.push(cur.trim());
+    return vals;
+  }
+
+  async function importCsv(file: File) {
+    if (!periodId || !canEdit) return;
+    setBusy(true);
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length < 2) { flash("CSV has no data rows"); return; }
+
+      const hdr = parseCsvLine(lines[0]).map((h) => h.toLowerCase().replace(/[^a-z_]/g, ""));
+      const nameIdx = hdr.findIndex((h) => h === "name" || h === "task");
+      if (nameIdx === -1) { flash("CSV must have a 'name' or 'task' column"); return; }
+
+      const col = (h: string) => hdr.indexOf(h);
+      const ownerMap = new Map(owners.map((o) => [o.name.toLowerCase(), o.id]));
+      const weekMap: Record<string, Week> = { one: "One", two: "Two", three: "Three", "1": "One", "2": "Two", "3": "Three", wk1: "One", wk2: "Two", wk3: "Three" };
+
+      const parsed: Record<string, unknown>[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const v = parseCsvLine(lines[i]);
+        const name = v[nameIdx];
+        if (!name) continue;
+
+        const ownerRaw = v[col("owner")] ?? v[col("owner_name")] ?? "";
+        const weekRaw = (v[col("week")] ?? "One").toLowerCase();
+
+        parsed.push({
+          name,
+          type: v[col("type")] || "Close",
+          category: v[col("category")] || "General",
+          week: weekMap[weekRaw] ?? "One",
+          owner_id: ownerMap.get(ownerRaw.toLowerCase()) ?? null,
+          status: v[col("status")] || "Not Started",
+          frequency: v[col("frequency")] || null,
+          due_date: v[col("due_date")] || v[col("due")] || null,
+          notes: v[col("notes")] || "",
+        });
+      }
+
+      if (!parsed.length) { flash("No valid rows found in CSV"); return; }
+
+      const result = await api.importTasks(periodId, parsed);
+      setTasks((ts) => [...ts, ...result.tasks]);
+      flash(`Imported ${result.count} tasks`);
+    } catch (e) {
+      flash((e as Error).message);
+    } finally {
+      setBusy(false);
+      if (csvRef.current) csvRef.current.value = "";
+    }
+  }
+
   return (
     <div className="wrap">
       {/* Masthead */}
@@ -394,6 +467,12 @@ export default function TrackerApp({
             </select>
             <div className="toolbar-r">
               <button className="btn ghost sm" onClick={() => setShowNA((v) => !v)}>{showNA ? "Hide N/A" : "Show N/A"}</button>
+              {canEdit && (
+                <>
+                  <input ref={csvRef} type="file" accept=".csv" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) importCsv(f); }} />
+                  <button className="btn sm" onClick={() => csvRef.current?.click()} disabled={busy || !periodId}>Import CSV</button>
+                </>
+              )}
               <button className="btn sm" onClick={exportCsv}>Export CSV</button>
             </div>
           </div>

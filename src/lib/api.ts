@@ -52,4 +52,10 @@ export const api = {
     }).then((r) => json<{ ok: boolean }>(r)),
   deleteTask: (id: string) =>
     fetch(`/api/tasks/${id}`, { method: "DELETE" }).then((r) => json<{ ok: boolean }>(r)),
+  importTasks: (periodId: string, tasks: Record<string, unknown>[]) =>
+    fetch("/api/tasks/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ period_id: periodId, tasks }),
+    }).then((r) => json<{ count: number; tasks: Task[] }>(r)),
 };

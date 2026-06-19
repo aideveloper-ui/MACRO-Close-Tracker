@@ -112,6 +112,26 @@ export async function getTasks(periodId: string): Promise<Task[]> {
   return data ?? [];
 }
 
+export async function bulkCreateTasks(rows: Array<Partial<Task> & { period_id: string; name: string }>): Promise<Task[]> {
+  if (!rows.length) return [];
+  const inserts = rows.map((r, i) => ({
+    period_id: r.period_id,
+    type: r.type ?? "Close",
+    category: r.category ?? "General",
+    name: r.name,
+    week: r.week ?? "One",
+    owner_id: r.owner_id ?? null,
+    status: r.status ?? "Not Started",
+    frequency: r.frequency ?? null,
+    notes: r.notes ?? "",
+    due_date: r.due_date ?? null,
+    sort_order: r.sort_order ?? 900 + i,
+  }));
+  const { data, error } = await supabase.from("tasks").insert(inserts).select("*");
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
 export async function createTask(input: Partial<Task> & { period_id: string; name: string }): Promise<Task> {
   const { data, error } = await supabase
     .from("tasks")
