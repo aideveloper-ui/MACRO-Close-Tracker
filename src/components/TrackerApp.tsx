@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback, useRef } from "react";
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { UserButton } from "@clerk/nextjs";
 import type { Owner, Period, Task, Status, Week, Role } from "@/lib/types";
 import { STATUSES, WEEKS, STATUS_CLASS, WEEK_ORDER } from "@/lib/types";
@@ -10,9 +10,48 @@ import CalendarView from "@/components/CalendarView";
 import GuideView from "@/components/GuideView";
 import DeptGuide from "@/components/DeptGuide";
 import Modal from "@/components/Modal";
+import ThemeToggle from "@/components/ThemeToggle";
 
 type View = "tracker" | "calendar" | "guide" | "dept";
 type Group = "week" | "cat" | "owner" | "type";
+
+const NAV: { key: View; label: string; icon: React.ReactNode }[] = [
+  {
+    key: "tracker",
+    label: "Close Tracker",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+    ),
+  },
+  {
+    key: "calendar",
+    label: "Calendar",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+    ),
+  },
+  {
+    key: "guide",
+    label: "How to Manage",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
+    ),
+  },
+  {
+    key: "dept",
+    label: "Department Guide",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+    ),
+  },
+];
+
+const VIEW_TITLE: Record<View, string> = {
+  tracker: "Close Tracker",
+  calendar: "Calendar",
+  guide: "How to Manage the Close",
+  dept: "Department Guide",
+};
 
 interface Props {
   owners: Owner[];
@@ -50,6 +89,25 @@ export default function TrackerApp({
   const [toastType, setToastType] = useState<"info" | "success" | "error">("info");
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
+
+  // shell / navigation
+  const [navRail, setNavRail] = useState(false); // desktop: collapse to icon rail
+  const [mobileNav, setMobileNav] = useState(false); // mobile: off-canvas drawer
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // keyboard shortcut: "/" focuses search
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (e.key === "/" && tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT") {
+        e.preventDefault();
+        setView("tracker");
+        setTimeout(() => searchRef.current?.focus(), 0);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Modal state
   type ModalType = null | "newPeriod" | "rename" | "deletePeriod" | "resetPeriod" | "deleteTask" | "renameTask" | "importChoice";
@@ -393,54 +451,95 @@ export default function TrackerApp({
   }
 
   return (
-    <div className="wrap">
-      {/* Masthead */}
-      <div className="mast">
-        <div className="brand">
-          <div className="eyebrow">MACRO Media, LLC &amp; Subsidiaries</div>
-          <h1>
-            Accounting &amp; <em>Finance</em>
-          </h1>
-          <div className="sub">Monthly close tracker &amp; department reference · sample data</div>
+    <div className={`shell${navRail ? " rail" : ""}${mobileNav ? " mobile-open" : ""}`}>
+      {/* Mobile overlay */}
+      <div className="sb-overlay" onClick={() => setMobileNav(false)} />
+
+      {/* Sidebar */}
+      <aside className="sidebar">
+        <div className="sb-brand">
+          <div className="sb-logo">M</div>
+          <div className="sb-brandtext">
+            <div className="sb-eyebrow">MACRO Media</div>
+            <div className="sb-name">Accounting &amp; Finance</div>
+          </div>
         </div>
-        <div className="period">
-          {view === "tracker" && (
-            <>
-              <select value={periodId ?? ""} onChange={(e) => switchPeriod(e.target.value)} title="Active close period">
-                {periods.map((p) => (
-                  <option key={p.id} value={p.id}>{p.label}</option>
-                ))}
-              </select>
+
+        <nav className="sb-nav">
+          {NAV.map((n) => (
+            <button
+              key={n.key}
+              className={`sb-link${view === n.key ? " on" : ""}`}
+              onClick={() => { setView(n.key); setMobileNav(false); }}
+              title={n.label}
+            >
+              <span className="sb-icon">{n.icon}</span>
+              <span className="sb-label">{n.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        {view === "tracker" && (
+          <div className="sb-section">
+            <div className="sb-sectlabel">Close Period</div>
+            <select className="sb-period" value={periodId ?? ""} onChange={(e) => switchPeriod(e.target.value)} title="Active close period">
+              {periods.map((p) => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+            </select>
+            <div className="sb-periodbtns">
               <button className="btn sm" onClick={() => { setModalInput(""); setModal("newPeriod"); }} disabled={busy || !canEdit}>+ New</button>
               <button className="btn ghost sm" onClick={() => { setModalInput(period?.label ?? ""); setModal("rename"); }} disabled={!period || !canEdit}>Rename</button>
               <button className="btn ghost sm" onClick={() => setModal("deletePeriod")} disabled={!period || !canEdit}>Delete</button>
-            </>
-          )}
-          {!canEdit && (
-            <span className="chip is-na" title="Your account has view-only access">
-              <span className="dot" />View only
-            </span>
-          )}
-          {authEnabled && (
-            <>
-              {userName && (
-                <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>
-                  {userName}<span style={{ opacity: 0.6 }}> · {role}</span>
-                </span>
-              )}
-              <UserButton />
-            </>
-          )}
-        </div>
-      </div>
+            </div>
+          </div>
+        )}
 
-      {/* Tabs */}
-      <nav className="tabs">
-        <button className={`tab ${view === "tracker" ? "on" : ""}`} onClick={() => setView("tracker")}>Close Tracker</button>
-        <button className={`tab ${view === "calendar" ? "on" : ""}`} onClick={() => setView("calendar")}>Calendar</button>
-        <button className={`tab ${view === "guide" ? "on" : ""}`} onClick={() => setView("guide")}>How to Manage the Close</button>
-        <button className={`tab ${view === "dept" ? "on" : ""}`} onClick={() => setView("dept")}>Department Guide</button>
-      </nav>
+        <div className="sb-foot">
+          <button className="sb-collapse" onClick={() => setNavRail((v) => !v)} title={navRail ? "Expand sidebar" : "Collapse sidebar"}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            <span className="sb-label">Collapse</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main column */}
+      <div className="main">
+        <header className="topbar">
+          <button className="hamburger" onClick={() => setMobileNav((v) => !v)} aria-label="Toggle menu">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M3 6h18M3 18h18" /></svg>
+          </button>
+          <div className="crumb">
+            <span className="crumb-page">{VIEW_TITLE[view]}</span>
+            <span className="crumb-sub">MACRO Media, LLC &amp; Subsidiaries · sample data</span>
+          </div>
+          <div className="topbar-r">
+            {view === "tracker" && (
+              <div className="topsearch">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+                <input ref={searchRef} type="text" placeholder="Search tasks, notes, owners…  ( / )" value={q} onChange={(e) => setQ(e.target.value)} />
+              </div>
+            )}
+            <ThemeToggle />
+            {!canEdit && (
+              <span className="chip is-na" title="Your account has view-only access">
+                <span className="dot" />View only
+              </span>
+            )}
+            {authEnabled && (
+              <>
+                {userName && (
+                  <span className="topuser">
+                    {userName}<span style={{ opacity: 0.6 }}> · {role}</span>
+                  </span>
+                )}
+                <UserButton />
+              </>
+            )}
+          </div>
+        </header>
+
+        <div className="content">
 
       {/* Tracker */}
       {view === "tracker" && (
@@ -490,9 +589,6 @@ export default function TrackerApp({
 
           {/* Controls */}
           <div className="controls">
-            <div className="grow">
-              <input type="text" placeholder="Search tasks, notes, owners…" value={q} onChange={(e) => setQ(e.target.value)} />
-            </div>
             <div className="seg">
               {(["week", "cat", "owner", "type"] as Group[]).map((g) => (
                 <button key={g} className={group === g ? "on" : ""} onClick={() => setGroup(g)}>
@@ -530,7 +626,32 @@ export default function TrackerApp({
           {/* Board */}
           <div>
             {groups.keys.length === 0 ? (
-              <div className="panel empty">No tasks match the current filters.</div>
+              tasks.length === 0 ? (
+                <div className="panel emptystate">
+                  <div className="empty-ic">
+                    <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M12 18v-6M9 15h6" /></svg>
+                  </div>
+                  <h3>No tasks in this period yet</h3>
+                  <p>Import your close checklist from a CSV, reset to the standard template, or add tasks one at a time below.</p>
+                  {canEdit && (
+                    <div className="empty-actions">
+                      <button className="btn primary sm" onClick={() => csvRef.current?.click()} disabled={busy || !periodId}>Import CSV</button>
+                      <button className="btn sm" onClick={() => setModal("resetPeriod")} disabled={!period}>Reset to template</button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="panel emptystate">
+                  <div className="empty-ic">
+                    <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+                  </div>
+                  <h3>No matching tasks</h3>
+                  <p>No tasks match your current search or filters.</p>
+                  <div className="empty-actions">
+                    <button className="btn sm" onClick={() => { setQ(""); setFOwner("all"); setFStatus("all"); setFWeek("all"); setShowNA(true); }}>Clear filters</button>
+                  </div>
+                </div>
+              )
             ) : (
               groups.keys.map((k) => {
                 const items = groups.g[k].slice().sort((a, b) => (WEEK_ORDER[a.week] || 9) - (WEEK_ORDER[b.week] || 9));
@@ -606,6 +727,9 @@ export default function TrackerApp({
 
       {view === "guide" && <GuideView />}
       {view === "dept" && <DeptGuide />}
+
+        </div>{/* /.content */}
+      </div>{/* /.main */}
 
       {/* Modals */}
       <Modal open={modal === "newPeriod"} title="New Close Period" onClose={() => setModal(null)} actions={
