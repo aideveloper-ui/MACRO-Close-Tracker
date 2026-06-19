@@ -46,7 +46,9 @@ export default function TrackerApp({
   const [showNA, setShowNA] = useState(true);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState("");
+  const [toastType, setToastType] = useState<"info" | "success" | "error">("info");
   const [busy, setBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const ownerName = useCallback(
     (id: string | null) => owners.find((o) => o.id === id)?.name ?? "(unassigned)",
@@ -54,9 +56,10 @@ export default function TrackerApp({
   );
   const period = periods.find((p) => p.id === periodId) ?? null;
 
-  const flash = useCallback((msg: string) => {
+  const flash = useCallback((msg: string, type: "info" | "success" | "error" = "info") => {
     setToast(msg);
-    setTimeout(() => setToast(""), 1800);
+    setToastType(type);
+    setTimeout(() => setToast(""), type === "success" ? 3000 : 1800);
   }, []);
 
   // ---------- task mutations (optimistic) ----------
@@ -296,18 +299,25 @@ export default function TrackerApp({
   async function importCsv(file: File) {
     if (!periodId || !canEdit) return;
     setBusy(true);
+    setImporting(true);
+    flash("Importing tasks...", "info");
     try {
       const text = await file.text();
       const lines = text.split(/\r?\n/).filter((l) => l.trim());
-      if (lines.length < 2) { flash("CSV has no data rows"); return; }
+      if (lines.length < 2) { flash("CSV has no data rows", "error"); return; }
 
       const hdr = parseCsvLine(lines[0]).map((h) => h.toLowerCase().replace(/[^a-z_]/g, ""));
       const nameIdx = hdr.findIndex((h) => h === "name" || h === "task");
-      if (nameIdx === -1) { flash("CSV must have a 'name' or 'task' column"); return; }
+      if (nameIdx === -1) { flash("CSV must have a 'name' or 'task' column", "error"); return; }
 
-      const col = (h: string) => hdr.indexOf(h);
+      const col = (h: string) => { const i = hdr.indexOf(h); return i >= 0 ? i : -1; };
+      const get = (v: string[], ...keys: string[]) => {
+        for (const k of keys) { const i = col(k); if (i >= 0 && v[i]) return v[i]; }
+        return "";
+      };
       const ownerMap = new Map(owners.map((o) => [o.name.toLowerCase(), o.id]));
       const weekMap: Record<string, Week> = { one: "One", two: "Two", three: "Three", "1": "One", "2": "Two", "3": "Three", wk1: "One", wk2: "Two", wk3: "Three" };
+      const typeMap: Record<string, string> = { close: "Close", review: "Close", "close adjacent": "Close Adjacent", adjacent: "Close Adjacent" };
 
       const parsed: Record<string, unknown>[] = [];
       for (let i = 1; i < lines.length; i++) {
@@ -315,31 +325,33 @@ export default function TrackerApp({
         const name = v[nameIdx];
         if (!name) continue;
 
-        const ownerRaw = v[col("owner")] ?? v[col("owner_name")] ?? "";
-        const weekRaw = (v[col("week")] ?? "One").toLowerCase();
+        const ownerRaw = get(v, "owner", "owner_name");
+        const weekRaw = (get(v, "week") || "One").toLowerCase();
+        const typeRaw = (get(v, "type") || "Close").toLowerCase();
 
         parsed.push({
           name,
-          type: v[col("type")] || "Close",
-          category: v[col("category")] || "General",
+          type: typeMap[typeRaw] ?? "Close",
+          category: get(v, "category") || "General",
           week: weekMap[weekRaw] ?? "One",
           owner_id: ownerMap.get(ownerRaw.toLowerCase()) ?? null,
-          status: v[col("status")] || "Not Started",
-          frequency: v[col("frequency")] || null,
-          due_date: v[col("due_date")] || v[col("due")] || null,
-          notes: v[col("notes")] || "",
+          status: get(v, "status") || "Not Started",
+          frequency: get(v, "frequency") || null,
+          due_date: get(v, "due_date", "due") || null,
+          notes: get(v, "notes") || "",
         });
       }
 
-      if (!parsed.length) { flash("No valid rows found in CSV"); return; }
+      if (!parsed.length) { flash("No valid rows found in CSV", "error"); return; }
 
       const result = await api.importTasks(periodId, parsed);
       setTasks((ts) => [...ts, ...result.tasks]);
-      flash(`Imported ${result.count} tasks`);
+      flash(`Successfully imported ${result.count} tasks`, "success");
     } catch (e) {
-      flash((e as Error).message);
+      flash(`Import failed: ${(e as Error).message}`, "error");
     } finally {
       setBusy(false);
+      setImporting(false);
       if (csvRef.current) csvRef.current.value = "";
     }
   }
@@ -470,7 +482,9 @@ export default function TrackerApp({
               {canEdit && (
                 <>
                   <input ref={csvRef} type="file" accept=".csv" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) importCsv(f); }} />
-                  <button className="btn sm" onClick={() => csvRef.current?.click()} disabled={busy || !periodId}>Import CSV</button>
+                  <button className="btn sm" onClick={() => csvRef.current?.click()} disabled={busy || !periodId}>
+                    {importing ? "Importing..." : "Import CSV"}
+                  </button>
                 </>
               )}
               <button className="btn sm" onClick={exportCsv}>Export CSV</button>
@@ -556,7 +570,7 @@ export default function TrackerApp({
       {view === "guide" && <GuideView />}
       {view === "dept" && <DeptGuide />}
 
-      <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
+      <div className={`toast ${toast ? "show" : ""}`} style={toastType === "success" ? { background: "#2a7a4b" } : toastType === "error" ? { background: "#c0392b" } : undefined}>{toast}</div>
     </div>
   );
 }
