@@ -111,11 +111,26 @@ export default function TrackerApp({
   }, []);
 
   // Modal state
-  type ModalType = null | "newPeriod" | "rename" | "deletePeriod" | "resetPeriod" | "deleteTask" | "renameTask" | "importChoice";
+  type ModalType = null | "newPeriod" | "rename" | "deletePeriod" | "resetPeriod" | "deleteTask" | "renameTask" | "importChoice" | "exportRange";
   const [modal, setModal] = useState<ModalType>(null);
   const [modalInput, setModalInput] = useState("");
   const [modalTarget, setModalTarget] = useState<string | null>(null);
   const [pendingCsvData, setPendingCsvData] = useState<Record<string, unknown>[] | null>(null);
+
+  // Export date-range state
+  const [exportPreset, setExportPreset] = useState<"all" | "15" | "30" | "60" | "90" | "custom">("all");
+  const [exportFrom, setExportFrom] = useState("");
+  const [exportTo, setExportTo] = useState("");
+
+  function applyExportPreset(preset: typeof exportPreset) {
+    setExportPreset(preset);
+    if (preset === "all" || preset === "custom") { setExportFrom(""); setExportTo(""); return; }
+    const days = parseInt(preset, 10);
+    const today = new Date();
+    const from = new Date(today); from.setDate(today.getDate() - days);
+    setExportFrom(from.toISOString().slice(0, 10));
+    setExportTo(today.toISOString().slice(0, 10));
+  }
 
   const ownerName = useCallback(
     (id: string | null) => owners.find((o) => o.id === id)?.name ?? "(unassigned)",
@@ -330,9 +345,26 @@ export default function TrackerApp({
   const c = counts(tasks);
   const segDenom = overall.denom || 1;
 
-  function exportCsv() {
+  function openExportModal() {
+    setExportPreset("all");
+    setExportFrom("");
+    setExportTo("");
+    setModal("exportRange");
+  }
+
+  function doExportCsv() {
+    setModal(null);
     const head = ["Type", "Category", "Task", "Week", "Owner", "Status", "Frequency", "Due", "Notes"];
-    const rows = tasks.map((t) => [
+    let exportTasks = tasks;
+    if (exportPreset !== "all" && exportFrom) {
+      exportTasks = tasks.filter((t) => {
+        if (!t.due_date) return false;
+        if (t.due_date < exportFrom) return false;
+        if (exportTo && t.due_date > exportTo) return false;
+        return true;
+      });
+    }
+    const rows = exportTasks.map((t) => [
       t.type, t.category, t.name, t.week, ownerName(t.owner_id), t.status,
       t.frequency ?? "", t.due_date ?? "", t.notes,
     ]);
@@ -342,8 +374,10 @@ export default function TrackerApp({
     const blob = new Blob([csv], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `${period?.label ?? "close"}.csv`;
+    const suffix = exportPreset === "all" ? "all" : exportPreset === "custom" ? `${exportFrom}_to_${exportTo}` : `last-${exportPreset}d`;
+    a.download = `${period?.label ?? "close"}-${suffix}.csv`;
     a.click();
+    flash(`Exported ${exportTasks.length} tasks`, "success");
   }
 
   const csvRef = useRef<HTMLInputElement>(null);
@@ -621,7 +655,7 @@ export default function TrackerApp({
                   </button>
                 </>
               )}
-              <button className="btn sm" onClick={exportCsv}>Export CSV</button>
+              <button className="btn sm" onClick={openExportModal}>Export CSV</button>
             </div>
           </div>
 
@@ -802,6 +836,80 @@ export default function TrackerApp({
           <strong>Append</strong> adds the new tasks alongside existing ones.<br />
           <strong>Replace All</strong> removes existing tasks and imports fresh.
         </p>
+      </Modal>
+
+      {/* Export range modal */}
+      <Modal
+        open={modal === "exportRange"}
+        title="Export CSV"
+        onClose={() => setModal(null)}
+        actions={
+          <>
+            <button className="btn ghost sm" onClick={() => setModal(null)}>Cancel</button>
+            <button className="btn primary sm" onClick={doExportCsv}>
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:5}}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download
+            </button>
+          </>
+        }
+      >
+        <p style={{marginBottom:12}}>Choose a date range based on task due dates.</p>
+
+        {/* Preset chips */}
+        <div className="exp-presets">
+          {(["all", "15", "30", "60", "90", "custom"] as const).map((p) => (
+            <button
+              key={p}
+              className={`exp-chip${exportPreset === p ? " on" : ""}`}
+              onClick={() => applyExportPreset(p)}
+            >
+              {p === "all" ? "All tasks" : p === "custom" ? "Custom range" : `Last ${p} days`}
+            </button>
+          ))}
+        </div>
+
+        {/* Custom date inputs — show for all presets except "all" */}
+        {exportPreset !== "all" && (
+          <div className="exp-range">
+            <div className="exp-field">
+              <label>From</label>
+              <input
+                type="date"
+                value={exportFrom}
+                onChange={(e) => { setExportFrom(e.target.value); setExportPreset("custom"); }}
+              />
+            </div>
+            <div className="exp-sep">→</div>
+            <div className="exp-field">
+              <label>To</label>
+              <input
+                type="date"
+                value={exportTo}
+                onChange={(e) => { setExportTo(e.target.value); setExportPreset("custom"); }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Preview count */}
+        <div className="exp-preview">
+          {(() => {
+            if (exportPreset === "all") return <span>{tasks.length} tasks will be exported</span>;
+            if (!exportFrom) return <span className="exp-hint">Select a range above</span>;
+            const count = tasks.filter((t) => {
+              if (!t.due_date) return false;
+              if (exportFrom && t.due_date < exportFrom) return false;
+              if (exportTo && t.due_date > exportTo) return false;
+              return true;
+            }).length;
+            const noDate = tasks.filter((t) => !t.due_date).length;
+            return (
+              <>
+                <span><strong>{count}</strong> tasks match · {noDate} have no due date (excluded)</span>
+              </>
+            );
+          })()}
+        </div>
       </Modal>
 
       <div className={`toast ${toast ? "show" : ""}`} style={toastType === "success" ? { background: "#2a7a4b" } : toastType === "error" ? { background: "#c0392b" } : undefined}>{toast}</div>
