@@ -12,6 +12,7 @@ import DeptGuide from "@/components/DeptGuide";
 import Modal from "@/components/Modal";
 import ThemeToggle from "@/components/ThemeToggle";
 import MacroLogo from "@/components/MacroLogo";
+import DateInput from "@/components/DateInput";
 
 type View = "tracker" | "calendar" | "guide" | "dept";
 type Group = "week" | "cat" | "owner" | "type";
@@ -734,7 +735,7 @@ export default function TrackerApp({
               {owners.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
             <select value={aType} onChange={(e) => setAType(e.target.value as "Close" | "Close Adjacent")}><option>Close</option><option>Close Adjacent</option></select>
-            <input type="date" value={aDue} onChange={(e) => setADue(e.target.value)} title="Due date" />
+            <DateInput value={aDue} onChange={setADue} title="Due date" size="sm" />
             <button className="btn primary sm" onClick={addTask}>Add</button>
           </div>
           )}
@@ -873,20 +874,12 @@ export default function TrackerApp({
           <div className="exp-range">
             <div className="exp-field">
               <label>From</label>
-              <input
-                type="date"
-                value={exportFrom}
-                onChange={(e) => { setExportFrom(e.target.value); setExportPreset("custom"); }}
-              />
+              <DateInput value={exportFrom} onChange={(v) => { setExportFrom(v); setExportPreset("custom"); }} />
             </div>
             <div className="exp-sep">→</div>
             <div className="exp-field">
               <label>To</label>
-              <input
-                type="date"
-                value={exportTo}
-                onChange={(e) => { setExportTo(e.target.value); setExportPreset("custom"); }}
-              />
+              <DateInput value={exportTo} onChange={(v) => { setExportTo(v); setExportPreset("custom"); }} />
             </div>
           </div>
         )}
@@ -956,13 +949,12 @@ function TaskRow({
           <span className={`ty ${tyClass}`}>{tyLabel}</span>
           <span className="cat">{task.category}</span>
           {task.frequency && <span className="freq">{task.frequency}</span>}
-          <input
-            type="date"
-            className="duein"
+          <DateInput
             value={task.due_date ?? ""}
             disabled={!canEdit}
-            onChange={(e) => onPatch(task.id, { due_date: e.target.value || null })}
+            onChange={(iso) => onPatch(task.id, { due_date: iso || null })}
             title="Due date"
+            size="sm"
           />
           <input
             className="note"

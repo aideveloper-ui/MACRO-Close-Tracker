@@ -373,6 +373,25 @@ select.owner,select.wk-sel{font-size:11.5px;padding:5px 7px;width:100%;border-ra
 .modal-actions{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px 16px;border-top:1px solid var(--line)}
 .modal-actions .btn{min-width:80px;justify-content:center;display:inline-flex;align-items:center}
 
+/* DateInput — calendar picker widget */
+.dateinput{position:relative;display:inline-flex;align-items:center;gap:5px;
+  background:var(--field);border:1px solid var(--line-2);border-radius:8px;padding:5px 8px;
+  font-size:12.5px;color:var(--ink);cursor:pointer;transition:.15s;white-space:nowrap;min-width:118px}
+.dateinput:focus-within{border-color:var(--teal);box-shadow:0 0 0 3px rgba(21,96,130,.12)}
+.dateinput-sm{font-size:11.5px;padding:3px 7px;border-radius:7px;min-width:100px}
+.dateinput-disabled{opacity:.55;cursor:not-allowed}
+.di-display{flex:1;font-variant-numeric:tabular-nums}
+.di-ph{color:var(--ink-soft);opacity:.7}
+.di-icon{flex:none;border:none;background:transparent;color:var(--teal);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;padding:0;line-height:0}
+.di-icon:disabled{color:var(--ink-soft);cursor:not-allowed}
+.di-native{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;
+  border:none;background:transparent;font-size:0}
+.di-native:disabled{pointer-events:none}
+/* Inside calendar cards (compact) */
+.calcard .dateinput{min-width:88px;background:transparent;border-color:var(--line);font-size:10px;padding:2px 5px}
+.calcard .dateinput-sm{font-size:10px;padding:2px 5px}
+
 /* Export range modal */
 .exp-presets{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px}
 .exp-chip{font-family:inherit;font-size:12px;font-weight:600;padding:6px 13px;border-radius:20px;

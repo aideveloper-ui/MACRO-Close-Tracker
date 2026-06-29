@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Owner, Task, Week } from "@/lib/types";
 import { STATUS_CLASS } from "@/lib/types";
+import DateInput from "@/components/DateInput";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 
@@ -55,7 +56,7 @@ export default function CalendarView({
       <div className="cal-controls">
         <label style={{ fontSize: 11.5, color: "var(--ink-soft)", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
           Week 1 Monday
-          <input type="date" className="duein" value={start} onChange={(e) => setStart(e.target.value)} />
+          <DateInput value={start} onChange={setStart} size="sm" placeholder="MM/DD/YYYY" />
         </label>
         <button className="btn primary sm" onClick={() => onSetStart(start)}>Apply schedule</button>
         <select value={calOwner} onChange={(e) => setCalOwner(e.target.value)}>
@@ -95,19 +96,17 @@ export default function CalendarView({
                   <div className="calcol" key={ci}>
                     <div className="dh">
                       <span>{col.label}</span>
-                      {col.date && <span className="dc">{col.date.slice(8, 10)}/{col.date.slice(5, 7)}</span>}
+                      {col.date && <span className="dc">{col.date.slice(5, 7)}/{col.date.slice(8, 10)}</span>}
                     </div>
                     {cellTasks.map((t) => (
                       <div className={`calcard s-${STATUS_CLASS[t.status]}`} key={t.id} title={t.name}>
                         <div className="ct">{t.name}</div>
                         <div className="cm">
                           {t.owner_id && <span className="own">{ownerName(t.owner_id)}</span>}
-                          <input
-                            type="date"
-                            className="duein"
-                            style={{ fontSize: 9.5, padding: "1px 3px" }}
+                          <DateInput
                             value={t.due_date ?? ""}
-                            onChange={(e) => onPatch(t.id, { due_date: e.target.value || null })}
+                            onChange={(iso) => onPatch(t.id, { due_date: iso || null })}
+                            size="sm"
                           />
                         </div>
                       </div>
